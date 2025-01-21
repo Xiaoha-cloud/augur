@@ -311,6 +311,18 @@ def update_existing_repos_repo_group_id(session, repo_id, new_repo_group_id):
     session.execute(update_stmt)
     session.commit()
 
+
+def update_existing_repos_repo_group_id(session, repo_id, new_repo_group_id):
+
+    # NOTE: It is safe to update the repos repo group id here because we know it will always be updating to an org repo group id. We don't want this behavior from the command line though, because a user adding a repo to a repo group could remove it from it's org repo group
+    update_stmt = (
+        s.update(Repo)
+        .where(Repo.repo_id == repo_id)
+        .values(repo_group_id=new_repo_group_id)
+    )
+    session.execute(update_stmt)
+    session.commit()
+
 # @celery.task
 # def add_org_repo_list(user_id, group_name, urls):
 

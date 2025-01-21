@@ -630,10 +630,6 @@ def pull_request_average_time_between_responses(repo_group_id, repo_id=None, gro
     :param begin_date: Specifies the begin date, defaults to '1970-1-1 00:00:00'
     :param end_date: Specifies the end date, defaults to datetime.now()
     :return: DataFrame of average time beteen responses
-=======
-@register_metric()
-def pull_request_merged_status_counts(repo_group_id, repo_id=None, begin_date='1970-1-1 00:00:01', end_date=None, group_by='week'):
->>>>>>> Stashed changes
     """
 
     if not begin_date:
@@ -1144,26 +1140,29 @@ def pull_request_average_time_to_responses_and_close(repo_group_id, repo_id=None
     return avg_pr_time_to_responses_and_close
 
 @register_metric()
-def pull_request_merged_status_counts(repo_group_id, repo_id=None, begin_date='1970-1-1 00:00:01', end_date=None, group_by='month'):
-    """ Merged status counts with time frames
-    
+def pull_request_merged_status_counts(repo_group_id, repo_id=None, begin_date='1970-1-1 00:00:01', end_date=None, group_by='week'):
+    """ Pull request merged status counts with time frame
+
     :param repo_group_id: The repository's repo_group_id
     :param repo_id: The repository's repo_id, defaults to None
-    :param group_by: The time frame the data is grouped by, options are: 'day', 'week', 'month' or 'year', defaults to 'month'
-    :param begin_date: Specifies the begin date, defaults to '1970-1-1 00:00:00'
+    :param group_by: The time frame the data is grouped by, options are: 'day', 'week', 'month' or 'year', defaults to 'week'
+    :param begin_date: Specifies the begin date, defaults to '1970-1-1 00:00:01'
     :param end_date: Specifies the end date, defaults to datetime.now()
-    :return: DataFrame of merged status counts
+    :return: DataFrame of pull request merged status counts
     """
 
+    if not begin_date:
+        begin_date = '1970-1-1'
     if not end_date:
         end_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
+
     unit_options = ['year', 'month', 'week', 'day']
     time_group_bys = []
-    for time_unit in unit_options.copy():
+    for unit in unit_options.copy():
         if group_by not in unit_options:
             continue
-        time_group_bys.append('closed_{}'.format(time_unit))
+        time_group_bys.append('closed_{}'.format(unit))
         del unit_options[0]
 
     if not repo_id:
