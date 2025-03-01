@@ -256,6 +256,10 @@ def setup_periodic_tasks(sender, **kwargs):
         one_day_in_seconds = 24*60*60
         sender.add_periodic_task(one_day_in_seconds, create_collection_status_records.s())
 
+        one_hour_in_seconds = 60*60
+        sender.add_periodic_task(one_hour_in_seconds, process_contributors.s())
+
+
 @after_setup_logger.connect
 def setup_loggers(*args,**kwargs):
     """Override Celery loggers with our own."""
