@@ -168,7 +168,6 @@ class GithubDataAccess:
             raise e
 
     def __handle_github_not_authorized_response(self):
-
         self.key = self.key_client.invalidate(self.key)
 
         
