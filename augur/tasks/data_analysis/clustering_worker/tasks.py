@@ -4,6 +4,12 @@ import time
 import traceback
 import re
 import pickle
+import uuid
+import datetime
+from pathlib import Path
+import pyLDAvis
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
 
 import sqlalchemy as s
 import pandas as pd
@@ -21,7 +27,7 @@ from collections import Counter
 
 from augur.tasks.init.celery_app import celery_app as celery
 from augur.application.db.lib import get_value, get_session, get_repo_by_repo_git
-from augur.application.db.models import RepoClusterMessage, RepoTopic, TopicWord
+from augur.application.db.models import RepoClusterMessage, RepoTopic, TopicWord, TopicModelMeta
 from augur.tasks.init.celery_app import AugurMlRepoCollectionTask
 
 
@@ -196,15 +202,21 @@ def clustering_model(repo_git: str,logger,engine) -> None:
         prediction = lda_model.transform(count_matrix_cur_repo)
 
         with get_session() as session:
+            # Get the latest model_id from topic_model_meta
+            latest_model = session.query(TopicModelMeta).order_by(TopicModelMeta.training_end_time.desc()).first()
+            if not latest_model:
+                logger.error("No topic model found in database")
+                return
 
+            model_id = latest_model.model_id
             logger.debug('for loop for vocab')
             for i, prob_vector in enumerate(prediction):
-                # repo_id = msg_df.loc[i]['repo_id']
                 for i, prob in enumerate(prob_vector):
                     record = {
                         'repo_id': int(repo_id),
                         'topic_id': i + 1,
                         'topic_prob': prob,
+                        'model_id': model_id,  # Add model_id
                         'tool_source': tool_source,
                         'tool_version': tool_version,
                         'data_source': data_source
@@ -214,7 +226,6 @@ def clustering_model(repo_git: str,logger,engine) -> None:
                     session.add(repo_topic_object)
                     session.commit()
 
-                    # result = db.execute(repo_topic_table.insert().values(record))
     except Exception as e:
         logger.debug(f'error is: {e}.')
         stacker = traceback.format_exc()
@@ -261,6 +272,24 @@ def preprocess_and_tokenize(text):
     return stems
 
 def train_model(logger, engine, max_df, min_df, max_features, ngram_range, num_clusters, num_topics, num_words_per_topic, tool_source, tool_version, data_source):
+    # Generate unique model ID and record start time
+    model_id = uuid.uuid4()
+    training_start_time = datetime.datetime.now()
+    
+    # Create model and artifacts directories
+    model_dir = Path("artifacts") / str(model_id)
+    model_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Store model file paths
+    model_files = {
+        "lda_model": str(model_dir / "lda_model.pkl"),
+        "vocabulary": str(model_dir / "vocabulary.pkl"),
+        "vocabulary_count": str(model_dir / "vocabulary_count.pkl"),
+        "kmeans_model": str(model_dir / "kmeans_repo_messages.pkl"),
+        "html": str(model_dir / f"topic_vis_{model_id}.html"),
+        "wordclouds": []
+    }
+
     def visualize_labels_PCA(features, labels, annotations, num_components, title):
         labels_color_map = {-1: "red"}
         for label in labels:
@@ -283,8 +312,9 @@ def train_model(logger, engine, max_df, min_df, max_features, ngram_range, num_c
         plt.xlabel("PCA Component 1")
         plt.ylabel("PCA Component 2")
         # plt.show()
-        filename = labels + "_PCA.png"
-        plt.save_fig(filename)
+        filename = str(model_dir / f"{labels}_PCA.png")
+        plt.savefig(filename)
+        return filename
 
     get_messages_sql = s.sql.text(
         """
@@ -335,31 +365,90 @@ def train_model(logger, engine, max_df, min_df, max_features, ngram_range, num_c
     # count_matrix = count_vectorizer.fit_transform(msg_df['msg_text'])
     count_transformer = count_vectorizer.fit(msg_df['msg_text'])
     count_matrix = count_transformer.transform(msg_df['msg_text'])
-    pickle.dump(count_transformer.vocabulary_, open("vocabulary_count", 'wb'))
+    pickle.dump(count_transformer.vocabulary_, open(model_files["vocabulary_count"], 'wb'))
     feature_names = count_vectorizer.get_feature_names()
 
     logger.debug("Calling LDA")
     lda_model = LDA(n_components=num_topics)
     lda_model.fit(count_matrix)
-    # each component in lda_model.components_ represents probability distribution over words in that topic
-    topic_list = lda_model.components_
-    # Getting word probability
-    # word_prob = lda_model.exp_dirichlet_component_
-    # word probabilities
-    # lda_model does not have state variable in this library
-    # topics_terms = lda_model.state.get_lambda()
-    # topics_terms_proba = np.apply_along_axis(lambda x: x/x.sum(),1,topics_terms)
-    # word_prob = [lda_model.id2word[i] for i in range(topics_terms_proba.shape[1])]
-
-    # Site explaining main library used for parsing topics: https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.LatentDirichletAllocation.html
-
-    # Good site for optimizing: https://medium.com/@yanlinc/how-to-build-a-lda-topic-model-using-from-text-601cdcbfd3a6
-    # Another Good Site: https://towardsdatascience.com/an-introduction-to-clustering-algorithms-in-python-123438574097
-    # https://machinelearningmastery.com/clustering-algorithms-with-python/
-
-    logging.info(f"Topic List Created: {topic_list}")
-    pickle.dump(lda_model, open("lda_model", 'wb'))
-    logging.info("pickle dump")
+    
+    # Generate and save pyLDAvis visualization
+    logger.info("Generating pyLDAvis visualization...")
+    vocab = count_vectorizer.get_feature_names_out()
+    term_frequency = np.array(count_matrix.sum(axis=0)).flatten()
+    vis_data = pyLDAvis.prepare(
+        topic_model=lda_model,
+        dtm=count_matrix,
+        vectorizer=count_vectorizer,
+        vocab=vocab,
+        term_frequency=term_frequency
+    )
+    pyLDAvis.save_html(vis_data, model_files["html"])
+    
+    # Generate and save wordclouds for each topic
+    logger.info("Generating wordclouds...")
+    for topic_id in range(num_topics):
+        # Get top words and their weights for this topic
+        top_words_idx = lda_model.components_[topic_id].argsort()[:-num_words_per_topic-1:-1]
+        word_weights = {feature_names[i]: lda_model.components_[topic_id][i] 
+                       for i in top_words_idx}
+        
+        # Generate wordcloud
+        wordcloud = WordCloud(width=800, height=400, 
+                            background_color='white',
+                            max_words=num_words_per_topic)
+        wordcloud.generate_from_frequencies(word_weights)
+        
+        # Save wordcloud
+        wordcloud_path = model_dir / f"wordcloud_{model_id}_{topic_id}.png"
+        plt.figure(figsize=(10, 5))
+        plt.imshow(wordcloud, interpolation='bilinear')
+        plt.axis('off')
+        plt.savefig(wordcloud_path)
+        plt.close()
+        
+        model_files["wordclouds"].append(str(wordcloud_path))
+    
+    # Calculate model metrics
+    coherence_score = calculate_coherence_score(lda_model, count_matrix, feature_names)
+    perplexity_score = lda_model.perplexity(count_matrix)
+    
+    # Record training end time
+    training_end_time = datetime.datetime.now()
+    
+    # Save models to versioned directory
+    pickle.dump(lda_model, open(model_files["lda_model"], 'wb'))
+    pickle.dump(count_transformer.vocabulary_, open(model_files["vocabulary_count"], 'wb'))
+    
+    # Store model metadata
+    model_meta = {
+        'model_id': model_id,
+        'model_method': 'LDA',
+        'num_topics': num_topics,
+        'num_words_per_topic': num_words_per_topic,
+        'training_parameters': {
+            'max_df': max_df,
+            'min_df': min_df,
+            'max_features': max_features,
+            'ngram_range': ngram_range,
+            'num_clusters': num_clusters
+        },
+        'model_file_paths': model_files,
+        'coherence_score': coherence_score,
+        'perplexity_score': perplexity_score,
+        'training_start_time': training_start_time,
+        'training_end_time': training_end_time,
+        'tool_source': tool_source,
+        'tool_version': tool_version,
+        'data_source': data_source
+    }
+    
+    # Save metadata to database
+    with get_session() as session:
+        topic_model_meta = TopicModelMeta(**model_meta)
+        session.add(topic_model_meta)
+        session.commit()
+        logger.info(f"Saved model metadata with ID: {model_id}")
 
     ## Advance Sequence SQL
 
@@ -374,20 +463,13 @@ def train_model(logger, engine, max_df, min_df, max_features, ngram_range, num_c
     # insert topic list into database
 
     with get_session() as session:
-
         topic_id = 1
-        for topic in topic_list:
-            # twid = self.get_max_id('topic_words', 'topic_words_id') + 1
-            # logger.info("twid variable is: {}".format(twid))
+        for topic in lda_model.components_:
             for i in topic.argsort()[:-num_words_per_topic - 1:-1]:
-                # twid+=1
-                # logger.info("in loop incremented twid variable is: {}".format(twid))
-                # logger.info("twid variable is: {}".format(twid))
                 record = {
-                    # 'topic_words_id': twid,
-                    # 'word_prob': word_prob[i],
                     'topic_id': int(topic_id),
                     'word': feature_names[i],
+                    'model_id': model_id,
                     'tool_source': tool_source,
                     'tool_version': tool_version,
                     'data_source': data_source
@@ -396,8 +478,6 @@ def train_model(logger, engine, max_df, min_df, max_features, ngram_range, num_c
                 topic_word_obj = TopicWord(**record)
                 session.add(topic_word_obj)
                 session.commit()
-
-                # result = db.execute(topic_words_table.insert().values(record))
                 logger.info(
                     "Primary key inserted into the topic_words table: {}".format(topic_word_obj.topic_words_id))
             topic_id += 1
@@ -444,6 +524,164 @@ def train_model(logger, engine, max_df, min_df, max_features, ngram_range, num_c
     visualize_labels_PCA(tfidf_matrix.todense(), msg_df['cluster'], msg_df['repo_id'], 2, "tex!")
 
 # visualize_labels_PCA(tfidf_matrix.todense(), msg_df['cluster'], msg_df['repo_id'], 2, "MIN_DF={} and MAX_DF={} and NGRAM_RANGE={}".format(MIN_DF, MAX_DF, NGRAM_RANGE))
+
+def calculate_coherence_score(model, count_matrix, feature_names):
+    """Calculate topic coherence score using normalized pointwise mutual information (NPMI)"""
+    # This is a simplified implementation - you may want to use a more sophisticated metric
+    coherence = 0
+    n_topics = len(model.components_)
+    
+    for topic_idx in range(n_topics):
+        # Get top words for this topic
+        top_words_idx = model.components_[topic_idx].argsort()[:-10-1:-1]
+        top_words = [feature_names[i] for i in top_words_idx]
+        
+        # Calculate average NPMI between top words
+        topic_coherence = 0
+        for i in range(len(top_words)):
+            for j in range(i+1, len(top_words)):
+                # Simplified NPMI calculation
+                word1, word2 = top_words[i], top_words[j]
+                p1 = np.mean(count_matrix[:, feature_names.index(word1)].toarray())
+                p2 = np.mean(count_matrix[:, feature_names.index(word2)].toarray())
+                p12 = np.mean((count_matrix[:, feature_names.index(word1)].toarray() > 0) & 
+                            (count_matrix[:, feature_names.index(word2)].toarray() > 0))
+                
+                if p12 > 0:
+                    npmi = np.log(p12 / (p1 * p2)) / -np.log(p12)
+                    topic_coherence += npmi
+                    
+        coherence += topic_coherence / (len(top_words) * (len(top_words)-1) / 2)
+    
+    return coherence / n_topics
+
+# Add helper function for inserting topic data
+def insert_topic_data(session, model_id, repo_id, topic_id, topic_prob, tool_source, tool_version, data_source):
+    """
+    Helper function to insert topic data into repo_topic table
+    
+    Args:
+        session: SQLAlchemy session
+        model_id: UUID of the topic model
+        repo_id: Repository ID
+        topic_id: Topic ID
+        topic_prob: Topic probability
+        tool_source: Source of the tool
+        tool_version: Version of the tool
+        data_source: Source of the data
+    """
+    record = {
+        'repo_id': int(repo_id),
+        'topic_id': topic_id,
+        'topic_prob': topic_prob,
+        'model_id': model_id,
+        'tool_source': tool_source,
+        'tool_version': tool_version,
+        'data_source': data_source
+    }
+    
+    repo_topic_object = RepoTopic(**record)
+    session.add(repo_topic_object)
+    session.commit()
+    return repo_topic_object
+
+def insert_topic_word(session, model_id, topic_id, word, tool_source, tool_version, data_source):
+    """
+    Helper function to insert topic word data into topic_words table
+    
+    Args:
+        session: SQLAlchemy session
+        model_id: UUID of the topic model
+        topic_id: Topic ID
+        word: Word associated with the topic
+        tool_source: Source of the tool
+        tool_version: Version of the tool
+        data_source: Source of the data
+    """
+    record = {
+        'topic_id': topic_id,
+        'word': word,
+        'model_id': model_id,
+        'tool_source': tool_source,
+        'tool_version': tool_version,
+        'data_source': data_source
+    }
+    
+    topic_word_obj = TopicWord(**record)
+    session.add(topic_word_obj)
+    session.commit()
+    return topic_word_obj
+
+# Add helper functions for model comparison and visualization
+def get_latest_model_metadata():
+    """Get metadata for the most recent model"""
+    with get_session() as session:
+        latest_model = session.query(TopicModelMeta).order_by(
+            TopicModelMeta.training_end_time.desc()
+        ).first()
+        return latest_model
+
+def get_model_topic_distributions(model_id):
+    """Get topic distributions for a specific model"""
+    with get_session() as session:
+        distributions = session.query(RepoTopic).filter(
+            RepoTopic.model_id == model_id
+        ).all()
+        return distributions
+
+def compare_models(model_id1, model_id2):
+    """Compare two models based on keyword overlap and coherence scores"""
+    with get_session() as session:
+        # Get model metadata
+        model1 = session.query(TopicModelMeta).filter(
+            TopicModelMeta.model_id == model_id1
+        ).first()
+        model2 = session.query(TopicModelMeta).filter(
+            TopicModelMeta.model_id == model_id2
+        ).first()
+        
+        if not model1 or not model2:
+            raise ValueError("One or both models not found")
+            
+        # Get topic words for both models
+        words1 = session.query(TopicWord).filter(
+            TopicWord.model_id == model_id1
+        ).all()
+        words2 = session.query(TopicWord).filter(
+            TopicWord.model_id == model_id2
+        ).all()
+        
+        # Calculate keyword overlap
+        words1_set = {w.word for w in words1}
+        words2_set = {w.word for w in words2}
+        overlap = len(words1_set.intersection(words2_set)) / len(words1_set.union(words2_set))
+        
+        return {
+            'model1_coherence': model1.coherence_score,
+            'model2_coherence': model2.coherence_score,
+            'coherence_diff': model1.coherence_score - model2.coherence_score,
+            'keyword_overlap': overlap,
+            'model1_topics': model1.num_topics,
+            'model2_topics': model2.num_topics
+        }
+
+def display_model_visualization(model_id):
+    """Display pyLDAvis visualization for a specific model"""
+    with get_session() as session:
+        model = session.query(TopicModelMeta).filter(
+            TopicModelMeta.model_id == model_id
+        ).first()
+        
+        if not model:
+            raise ValueError("Model not found")
+            
+        html_path = model.model_file_paths['html']
+        if not os.path.exists(html_path):
+            raise FileNotFoundError(f"Visualization file not found: {html_path}")
+            
+        # For Jupyter notebook
+        from IPython.display import IFrame
+        return IFrame(html_path, width=1000, height=600)
 
 
 

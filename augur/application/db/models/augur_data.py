@@ -27,6 +27,8 @@ import logging
 import re
 import json
 import urllib.parse
+import pyLDAvis
+import numpy as np
 
 
 from augur.application.db.models.base import Base
@@ -232,23 +234,23 @@ class Contributor(Base):
     gh_site_admin = Column(String)
     gl_web_url = Column(
         String,
-        comment='“web_url” value from these API calls to GitLab, all for the same user\n\nhttps://gitlab.com/api/v4/users?username=computationalmystic\nhttps://gitlab.com/api/v4/users?search=s@goggins.com\nhttps://gitlab.com/api/v4/users?search=outdoors@acm.org\n\n[\n  {\n    "id": 5481034,\n    "name": "sean goggins",\n    "username": "computationalmystic",\n    "state": "active",\n    "avatar_url": "https://secure.gravatar.com/avatar/fb1fb43953a6059df2fe8d94b21d575c?s=80&d=identicon",\n    "web_url": "https://gitlab.com/computationalmystic"\n  }\n]',
+        comment='"web_url" value from these API calls to GitLab, all for the same user\n\nhttps://gitlab.com/api/v4/users?username=computationalmystic\nhttps://gitlab.com/api/v4/users?search=s@goggins.com\nhttps://gitlab.com/api/v4/users?search=outdoors@acm.org\n\n[\n  {\n    "id": 5481034,\n    "name": "sean goggins",\n    "username": "computationalmystic",\n    "state": "active",\n    "avatar_url": "https://secure.gravatar.com/avatar/fb1fb43953a6059df2fe8d94b21d575c?s=80&d=identicon",\n    "web_url": "https://gitlab.com/computationalmystic"\n  }\n]',
     )
     gl_avatar_url = Column(
         String,
-        comment='“avatar_url” value from these API calls to GitLab, all for the same user\n\nhttps://gitlab.com/api/v4/users?username=computationalmystic\nhttps://gitlab.com/api/v4/users?search=s@goggins.com\nhttps://gitlab.com/api/v4/users?search=outdoors@acm.org\n\n[\n  {\n    "id": 5481034,\n    "name": "sean goggins",\n    "username": "computationalmystic",\n    "state": "active",\n    "avatar_url": "https://secure.gravatar.com/avatar/fb1fb43953a6059df2fe8d94b21d575c?s=80&d=identicon",\n    "web_url": "https://gitlab.com/computationalmystic"\n  }\n]',
+        comment='"avatar_url" value from these API calls to GitLab, all for the same user\n\nhttps://gitlab.com/api/v4/users?username=computationalmystic\nhttps://gitlab.com/api/v4/users?search=s@goggins.com\nhttps://gitlab.com/api/v4/users?search=outdoors@acm.org\n\n[\n  {\n    "id": 5481034,\n    "name": "sean goggins",\n    "username": "computationalmystic",\n    "state": "active",\n    "avatar_url": "https://secure.gravatar.com/avatar/fb1fb43953a6059df2fe8d94b21d575c?s=80&d=identicon",\n    "web_url": "https://gitlab.com/computationalmystic"\n  }\n]',
     )
     gl_state = Column(
         String,
-        comment='“state” value from these API calls to GitLab, all for the same user\n\nhttps://gitlab.com/api/v4/users?username=computationalmystic\nhttps://gitlab.com/api/v4/users?search=s@goggins.com\nhttps://gitlab.com/api/v4/users?search=outdoors@acm.org\n\n[\n  {\n    "id": 5481034,\n    "name": "sean goggins",\n    "username": "computationalmystic",\n    "state": "active",\n    "avatar_url": "https://secure.gravatar.com/avatar/fb1fb43953a6059df2fe8d94b21d575c?s=80&d=identicon",\n    "web_url": "https://gitlab.com/computationalmystic"\n  }\n]',
+        comment='"state" value from these API calls to GitLab, all for the same user\n\nhttps://gitlab.com/api/v4/users?username=computationalmystic\nhttps://gitlab.com/api/v4/users?search=s@goggins.com\nhttps://gitlab.com/api/v4/users?search=outdoors@acm.org\n\n[\n  {\n    "id": 5481034,\n    "name": "sean goggins",\n    "username": "computationalmystic",\n    "state": "active",\n    "avatar_url": "https://secure.gravatar.com/avatar/fb1fb43953a6059df2fe8d94b21d575c?s=80&d=identicon",\n    "web_url": "https://gitlab.com/computationalmystic"\n  }\n]',
     )
     gl_username = Column(
         String,
-        comment='“username” value from these API calls to GitLab, all for the same user\n\nhttps://gitlab.com/api/v4/users?username=computationalmystic\nhttps://gitlab.com/api/v4/users?search=s@goggins.com\nhttps://gitlab.com/api/v4/users?search=outdoors@acm.org\n\n[\n  {\n    "id": 5481034,\n    "name": "sean goggins",\n    "username": "computationalmystic",\n    "state": "active",\n    "avatar_url": "https://secure.gravatar.com/avatar/fb1fb43953a6059df2fe8d94b21d575c?s=80&d=identicon",\n    "web_url": "https://gitlab.com/computationalmystic"\n  }\n]',
+        comment='"username" value from these API calls to GitLab, all for the same user\n\nhttps://gitlab.com/api/v4/users?username=computationalmystic\nhttps://gitlab.com/api/v4/users?search=s@goggins.com\nhttps://gitlab.com/api/v4/users?search=outdoors@acm.org\n\n[\n  {\n    "id": 5481034,\n    "name": "sean goggins",\n    "username": "computationalmystic",\n    "state": "active",\n    "avatar_url": "https://secure.gravatar.com/avatar/fb1fb43953a6059df2fe8d94b21d575c?s=80&d=identicon",\n    "web_url": "https://gitlab.com/computationalmystic"\n  }\n]',
     )
     gl_full_name = Column(
         String,
-        comment='“name” value from these API calls to GitLab, all for the same user\n\nhttps://gitlab.com/api/v4/users?username=computationalmystic\nhttps://gitlab.com/api/v4/users?search=s@goggins.com\nhttps://gitlab.com/api/v4/users?search=outdoors@acm.org\n\n[\n  {\n    "id": 5481034,\n    "name": "sean goggins",\n    "username": "computationalmystic",\n    "state": "active",\n    "avatar_url": "https://secure.gravatar.com/avatar/fb1fb43953a6059df2fe8d94b21d575c?s=80&d=identicon",\n    "web_url": "https://gitlab.com/computationalmystic"\n  }\n]',
+        comment='"name" value from these API calls to GitLab, all for the same user\n\nhttps://gitlab.com/api/v4/users?username=computationalmystic\nhttps://gitlab.com/api/v4/users?search=s@goggins.com\nhttps://gitlab.com/api/v4/users?search=outdoors@acm.org\n\n[\n  {\n    "id": 5481034,\n    "name": "sean goggins",\n    "username": "computationalmystic",\n    "state": "active",\n    "avatar_url": "https://secure.gravatar.com/avatar/fb1fb43953a6059df2fe8d94b21d575c?s=80&d=identicon",\n    "web_url": "https://gitlab.com/computationalmystic"\n  }\n]',
     )
     gl_id = Column(
         BigInteger,
@@ -645,6 +647,7 @@ class TopicWord(Base):
     topic_id = Column(BigInteger)
     word = Column(String)
     word_prob = Column(Float(53))
+    model_id = Column(UUID(as_uuid=True), ForeignKey("augur_data.topic_model_meta.model_id"))  # 新增字段，指向 topic_model_meta
     tool_source = Column(String)
     tool_version = Column(String)
     data_source = Column(String)
@@ -772,8 +775,8 @@ class ContributorsAlias(Base):
         UniqueConstraint("alias_email"),
         {
             "schema": "augur_data",
-            "comment": "Every open source user may have more than one email used to make contributions over time. Augur selects the first email it encounters for a user as its “canonical_email”. \n\nThe canonical_email is also added to the contributors_aliases table, with the canonical_email and alias_email being identical.  Using this strategy, an email search will only need to join the alias table for basic email information, and can then more easily map the canonical email from each alias row to the same, more detailed information in the contributors table for a user. ",
-        },
+            "comment": """Every open source user may have more than one email used to make contributions over time. Augur selects the first email it encounters for a user as its canonical_email. The canonical_email is also added to the contributors_aliases table, with the canonical_email and alias_email being identical. Using this strategy, an email search will only need to join the alias table for basic email information, and can then more easily map the canonical email from each alias row to the same, more detailed information in the contributors table for a user."""
+        }
     )
 
     cntrb_alias_id = Column(
@@ -826,7 +829,7 @@ class Repo(Base):
 
         {
             "schema": "augur_data",
-            "comment": "This table is a combination of the columns in Facade’s repo table and GHTorrent’s projects table. ",
+            "comment": "This table is a combination of the columns in Facade's repo table and GHTorrent's projects table. ",
         },
     )
 
@@ -1200,7 +1203,7 @@ class RepoGroupInsight(Base):
     __tablename__ = "repo_group_insights"
     __table_args__ = {
         "schema": "augur_data",
-        "comment": 'This table is output from an analytical worker inside of Augur. It runs through the different metrics on a REPOSITORY_GROUP and identifies the five to ten most “interesting” metrics as defined by some kind of delta or other factor. The algorithm is going to evolve. \n\nWorker Design Notes: The idea is that the "insight worker" will scan through a bunch of active metrics or "synthetic metrics" to list the most important insights. ',
+        "comment": 'This table is output from an analytical worker inside of Augur. It runs through the different metrics on a REPOSITORY_GROUP and identifies the five to ten most "interesting" metrics as defined by some kind of delta or other factor. The algorithm is going to evolve. \n\nWorker Design Notes: The idea is that the "insight worker" will scan through a bunch of active metrics or "synthetic metrics" to list the most important insights. ',
     }
 
     rgi_id = Column(
@@ -1614,7 +1617,7 @@ class MessageAnalysisSummary(Base):
     __tablename__ = "message_analysis_summary"
     __table_args__ = {
         "schema": "augur_data",
-        "comment": "In a relationally perfect world, we would have a table called “message_analysis_run” the incremented the “worker_run_id” for both message_analysis and message_analysis_summary. For now, we decided this was overkill. ",
+        "comment": 'In a relationally perfect world, we would have a table called "message_analysis_run" the incremented the "worker_run_id" for both message_analysis and message_analysis_summary. For now, we decided this was overkill. ',
     }
 
     msg_summary_id = Column(
@@ -1653,7 +1656,7 @@ class MessageSentimentSummary(Base):
     __tablename__ = "message_sentiment_summary"
     __table_args__ = {
         "schema": "augur_data",
-        "comment": "In a relationally perfect world, we would have a table called “message_sentiment_run” the incremented the “worker_run_id” for both message_sentiment and message_sentiment_summary. For now, we decided this was overkill. ",
+        "comment": 'In a relationally perfect world, we would have a table called "message_sentiment_run" the incremented the "worker_run_id" for both message_sentiment and message_sentiment_summary. For now, we decided this was overkill. ',
     }
 
     msg_summary_id = Column(
@@ -1864,7 +1867,7 @@ class RepoBadging(Base):
     __tablename__ = "repo_badging"
     __table_args__ = {
         "schema": "augur_data",
-        "comment": "This will be collected from the LF’s Badging API\nhttps://bestpractices.coreinfrastructure.org/projects.json?pq=https%3A%2F%2Fgithub.com%2Fchaoss%2Faugur\n",
+        "comment": "This will be collected from the LF's Badging API\nhttps://bestpractices.coreinfrastructure.org/projects.json?pq=https%3A%2F%2Fgithub.com%2Fchaoss%2Faugur\n",
     }
 
     badge_collection_id = Column(
@@ -2080,7 +2083,7 @@ class RepoInsight(Base):
     __tablename__ = "repo_insights"
     __table_args__ = {
         "schema": "augur_data",
-        "comment": 'This table is output from an analytical worker inside of Augur. It runs through the different metrics on a repository and identifies the five to ten most “interesting” metrics as defined by some kind of delta or other factor. The algorithm is going to evolve. \n\nWorker Design Notes: The idea is that the "insight worker" will scan through a bunch of active metrics or "synthetic metrics" to list the most important insights. ',
+        "comment": 'This table is output from an analytical worker inside of Augur. It runs through the different metrics on a repository and identifies the five to ten most "interesting" metrics as defined by some kind of delta or other factor. The algorithm is going to evolve. \n\nWorker Design Notes: The idea is that the "insight worker" will scan through a bunch of active metrics or "synthetic metrics" to list the most important insights. ',
     }
 
     ri_id = Column(
@@ -2271,6 +2274,7 @@ class RepoTopic(Base):
     repo_id = Column(ForeignKey("augur_data.repo.repo_id"))
     topic_id = Column(Integer)
     topic_prob = Column(Float(53))
+    model_id = Column(UUID(as_uuid=True), ForeignKey("augur_data.topic_model_meta.model_id"))  # 新增字段，指向 topic_model_meta
     tool_source = Column(String)
     tool_version = Column(String)
     data_source = Column(String)
@@ -2374,7 +2378,7 @@ class DiscourseInsight(Base):
     __tablename__ = "discourse_insights"
     __table_args__ = {
         "schema": "augur_data",
-        "comment": "This table is populated by the “Discourse_Analysis_Worker”. It examines sequential discourse, using computational linguistic methods, to draw statistical inferences regarding the discourse in a particular comment thread. ",
+        "comment": 'This table is populated by the "Discourse_Analysis_Worker". It examines sequential discourse, using computational linguistic methods, to draw statistical inferences regarding the discourse in a particular comment thread. ',
     }
 
     msg_discourse_id = Column(
@@ -2904,7 +2908,7 @@ class PullRequestCommit(Base):
         UniqueConstraint("pull_request_id", "repo_id", "pr_cmt_sha"),
         {
             "schema": "augur_data",
-            "comment": "Pull request commits are an enumeration of each commit associated with a pull request. \nNot all pull requests are from a branch or fork into master. \nThe commits table intends to count only commits that end up in the master branch (i.e., part of the deployed code base for a project).\nTherefore, there will be commit “SHA”’s in this table that are no associated with a commit SHA in the commits table. \nIn cases where the PR is to the master branch of a project, you will find a match. In cases where the PR does not involve the master branch, you will not find a corresponding commit SHA in the commits table. This is expected. ",
+            "comment": 'Pull request commits are an enumeration of each commit associated with a pull request. \nNot all pull requests are from a branch or fork into master. \nThe commits table intends to count only commits that end up in the master branch (i.e., part of the deployed code base for a project).\nTherefore, there will be commit "SHA"\'s in this table that are no associated with a commit SHA in the commits table. \nIn cases where the PR is to the master branch of a project, you will find a match. In cases where the PR does not involve the master branch, you will not find a corresponding commit SHA in the commits table. This is expected. ',
         },
     )
 
@@ -3055,7 +3059,7 @@ class PullRequestFile(Base):
         UniqueConstraint("pull_request_id", "repo_id", "pr_file_path"),
         {
             "schema": "augur_data",
-            "comment": "Pull request commits are an enumeration of each commit associated with a pull request. \nNot all pull requests are from a branch or fork into master. \nThe commits table intends to count only commits that end up in the master branch (i.e., part of the deployed code base for a project).\nTherefore, there will be commit “SHA”’s in this table that are no associated with a commit SHA in the commits table. \nIn cases where the PR is to the master branch of a project, you will find a match. In cases where the PR does not involve the master branch, you will not find a corresponding commit SHA in the commits table. This is expected. ",
+            "comment": 'Pull request commits are an enumeration of each commit associated with a pull request. \nNot all pull requests are from a branch or fork into master. \nThe commits table intends to count only commits that end up in the master branch (i.e., part of the deployed code base for a project).\nTherefore, there will be commit "SHA"\'s in this table that are no associated with a commit SHA in the commits table. \nIn cases where the PR is to the master branch of a project, you will find a match. In cases where the PR does not involve the master branch, you will not find a corresponding commit SHA in the commits table. This is expected. ',
         },
     )
 
@@ -3197,7 +3201,8 @@ class PullRequestMessageRef(Base):
             onupdate="CASCADE",
             deferrable=True,
             initially="DEFERRED",
-        )
+        ),
+        nullable=False,
     )
     pr_message_ref_src_comment_id = Column(BigInteger)
     pr_message_ref_src_node_id = Column(String)
@@ -3601,3 +3606,26 @@ class RepoClone(Base):
     clone_data_timestamp = Column(TIMESTAMP(precision=6))
 
     repo = relationship("Repo")
+
+
+class TopicModelMeta(Base):
+    __tablename__ = "topic_model_meta"
+    __table_args__ = {"schema": "augur_data"}
+
+    model_id = Column(UUID(as_uuid=True), primary_key=True)
+    model_method = Column(String, nullable=False)
+    num_topics = Column(Integer, nullable=False)
+    num_words_per_topic = Column(Integer, nullable=False)
+    training_parameters = Column(JSONB, nullable=False)
+    model_file_paths = Column(JSONB, nullable=False)
+    coherence_score = Column(Float)
+    perplexity_score = Column(Float)
+    training_start_time = Column(TIMESTAMP(precision=0), nullable=False)
+    training_end_time = Column(TIMESTAMP(precision=0), nullable=False)
+    tool_source = Column(String, nullable=False)
+    tool_version = Column(String, nullable=False)
+    data_source = Column(String, nullable=False)
+    data_collection_date = Column(
+        TIMESTAMP(precision=0), server_default=text("CURRENT_TIMESTAMP")
+    )
+
