@@ -18,11 +18,22 @@ CREATE TABLE IF NOT EXISTS augur_data.topic_model_meta (
 
 -- Add model_id to repo_topic table
 ALTER TABLE augur_data.repo_topic 
-ADD COLUMN IF NOT EXISTS model_id UUID REFERENCES augur_data.topic_model_meta(model_id);
+ADD COLUMN IF NOT EXISTS model_id UUID;
 
 -- Add model_id to topic_words table
 ALTER TABLE augur_data.topic_words
-ADD COLUMN IF NOT EXISTS model_id UUID REFERENCES augur_data.topic_model_meta(model_id);
+ADD COLUMN IF NOT EXISTS model_id UUID;
+
+-- Add foreign key constraints
+ALTER TABLE augur_data.repo_topic
+ADD CONSTRAINT IF NOT EXISTS fk_repo_topic_model_id FOREIGN KEY (model_id)
+    REFERENCES augur_data.topic_model_meta(model_id)
+    ON DELETE SET NULL ON UPDATE CASCADE;
+
+ALTER TABLE augur_data.topic_words
+ADD CONSTRAINT IF NOT EXISTS fk_topic_words_model_id FOREIGN KEY (model_id)
+    REFERENCES augur_data.topic_model_meta(model_id)
+    ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- Create index on model_id for better query performance
 CREATE INDEX IF NOT EXISTS idx_repo_topic_model_id ON augur_data.repo_topic(model_id);
